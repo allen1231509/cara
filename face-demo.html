@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZoxiRobit Face ID</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a14;
+    color: #e0e0e0;
+    font-family: Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 { color: #00ff88; font-size: 22px; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 20px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; width: 100%; max-width: 680px; }
+  .tab {
+    flex: 1; padding: 10px; background: #13131f; border: 1px solid #2a2a3f;
+    border-radius: 8px; color: #888; cursor: pointer; font-size: 13px;
+    transition: all 0.15s;
+  }
+  .tab.active { background: #1a1a2e; color: #00ff88; border-color: #00ff88; }
+
+  /* Main container */
+  .panel { display: none; width: 100%; max-width: 680px; }
+  .panel.active { display: block; }
+
+  /* Video area */
+  #cam-wrap { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #111; }
+  #video { width: 100%; display: block; border-radius: 10px; }
+  #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+  /* Stats bar */
+  .stats {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 8px; margin: 10px 0;
+  }
+  .stat {
+    background: #13131f; border: 1px solid #2a2a3f; border-radius: 8px;
+    padding: 10px; text-align: center;
+  }
+  .stat-num { font-size: 20px; font-weight: bold; color: #00ff88; }
+  .stat-lbl { font-size: 11px; color: #666; margin-top: 2px; }
+
+  /* Buttons */
+  .btn {
+    padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer;
+    font-weight: bold; font-size: 14px; transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-green { background: #00ff88; color: #0a0a14; }
+  .btn-red { background: #ff4455; color: #fff; }
+  .btn-outline {
+    background: transparent; border: 1px solid #2a2a3f; color: #aaa;
+  }
+  .btn-outline:hover { border-color: #00ff88; color: #00ff88; }
+  .btn-full { width: 100%; display: block; }
+
+  /* Input */
+  input[type="text"] {
+    width: 100%; padding: 10px 14px; background: #13131f; border: 1px solid #2a2a3f;
+    border-radius: 8px; color: #e0e0e0; font-size: 14px; margin-bottom: 10px;
+  }
+  input[type="text"]:focus { outline: none; border-color: #00ff88; }
+
+  /* Photo grid */
+  .photo-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; min-height: 10px; }
+  .photo-thumb {
+    width: 72px; height: 72px; border-radius: 6px; object-fit: cover;
+    border: 2px solid #00ff88;
+  }
+  .photo-slot {
+    width: 72px; height: 72px; border-radius: 6px; border: 1px dashed #2a2a3f;
+    display: flex; align-items: center; justify-content: center; color: #444;
+    font-size: 22px; cursor: pointer;
+  }
+  .photo-slot:hover { border-color: #00ff88; color: #00ff88; }
+
+  /* Capture preview */
+  #cap-wrap { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #111; margin-bottom: 10px; }
+  #cap-video { width: 100%; display: block; border-radius: 10px; }
+
+  /* People list */
+  .person-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #13131f; border: 1px solid #2a2a3f; border-radius: 8px;
+    padding: 12px 16px; margin-bottom: 8px;
+  }
+  .person-name { font-size: 15px; font-weight: bold; }
+  .person-count { font-size: 12px; color: #666; margin-top: 2px; }
+  .btn-del { background: transparent; border: 1px solid #ff4455; color: #ff4455; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; }
+  .btn-del:hover { background: #ff4455; color: #fff; }
+
+  /* Status */
+  #status { margin-top: 8px; font-size: 13px; color: #888; min-height: 20px; }
+  #reg-status { margin-top: 8px; font-size: 13px; color: #888; min-height: 20px; }
+  #ppl-status { margin-top: 8px; font-size: 13px; color: #888; min-height: 20px; }
+
+  /* Badge */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+  .badge-green { background: #00ff8822; color: #00ff88; border: 1px solid #00ff8866; }
+  .badge-red { background: #ff445522; color: #ff4455; border: 1px solid #ff445566; }
+
+  .flex-row { display: flex; gap: 8px; }
+  .section-title { font-size: 13px; color: #666; margin: 12px 0 6px; }
+</style>
+</head>
+<body>
+
+<h1>🤖 ZoxiRobit Face ID</h1>
+<p class="subtitle">Reconocimiento facial con InsightFace · <span id="api-status">verificando API...</span></p>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('live')">📷 En vivo</button>
+  <button class="tab" onclick="switchTab('register')">➕ Registrar</button>
+  <button class="tab" onclick="switchTab('people')">👥 Personas</button>
+</div>
+
+<!-- ─── TAB: EN VIVO ─────────────────────────────────── -->
+<div id="tab-live" class="panel active">
+  <div id="cam-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-num" id="s-faces">0</div><div class="stat-lbl">caras</div></div>
+    <div class="stat"><div class="stat-num" id="s-server">—</div><div class="stat-lbl">server ms</div></div>
+    <div class="stat"><div class="stat-num" id="s-total">—</div><div class="stat-lbl">total ms</div></div>
+  </div>
+
+  <div class="flex-row">
+    <button id="btn-toggle" class="btn btn-green" style="flex:1" onclick="toggleLoop()">▶ Iniciar</button>
+    <button class="btn btn-outline" onclick="switchTab('register')">➕ Registrar cara</button>
+  </div>
+  <div id="status">Listo. Presiona Iniciar para comenzar.</div>
+</div>
+
+<!-- ─── TAB: REGISTRAR ───────────────────────────────── -->
+<div id="tab-register" class="panel">
+  <input type="text" id="reg-name" placeholder="Nombre de la persona (ej: Allen)" />
+
+  <div id="cap-wrap">
+    <video id="cap-video" autoplay playsinline muted></video>
+  </div>
+
+  <p class="section-title">Fotos capturadas (recomendado: 3–5 con distintos ángulos)</p>
+  <div class="photo-grid" id="photo-grid">
+    <div class="photo-slot" onclick="capturePhoto()" title="Capturar foto">+</div>
+  </div>
+
+  <div class="flex-row" style="margin-top:10px;">
+    <button class="btn btn-outline" style="flex:1" onclick="capturePhoto()">📸 Capturar</button>
+    <button class="btn btn-outline" style="flex:1" onclick="clearPhotos()">🗑 Limpiar</button>
+  </div>
+
+  <button class="btn btn-green btn-full" style="margin-top:12px;" onclick="registerPerson()">
+    💾 Guardar en base de datos
+  </button>
+  <div id="reg-status"></div>
+</div>
+
+<!-- ─── TAB: PERSONAS ───────────────────────────────── -->
+<div id="tab-people" class="panel">
+  <button class="btn btn-outline btn-full" onclick="loadPeople()">🔄 Actualizar lista</button>
+  <div id="ppl-status" style="margin-bottom:8px;"></div>
+  <div id="people-list"><p style="color:#555; font-size:13px; margin-top:12px;">Presiona Actualizar para cargar.</p></div>
+</div>
+
+<script>
+const API = 'https://allen23r32-facezoxi.hf.space';
+
+// ─── Estado global ──────────────────────────────────────────
+let running = false;
+let capturedPhotos = [];
+let capStream = null;
+
+// ─── Verificar API ──────────────────────────────────────────
+async function checkAPI() {
+  try {
+    const r = await fetch(API + '/');
+    if (r.ok) {
+      const d = await r.json();
+      document.getElementById('api-status').innerHTML =
+        `<span class="badge badge-green">● online · ${d.people_registered?.length ?? 0} personas</span>`;
+    }
+  } catch {
+    document.getElementById('api-status').innerHTML =
+      '<span class="badge badge-red">● sin conexión</span>';
+  }
+}
+checkAPI();
+
+// ─── Tabs ───────────────────────────────────────────────────
+function switchTab(name) {
+  ['live','register','people'].forEach((t, i) => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === name);
+    document.querySelectorAll('.tab')[i].classList.toggle('active', t === name);
+  });
+  if (name === 'register') startCapCamera();
+  else stopCapCamera();
+  if (name === 'people') loadPeople();
+}
+
+// ─── TAB EN VIVO ────────────────────────────────────────────
+const video   = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const ctx     = overlay.getContext('2d');
+
+navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+  .then(s => {
+    video.srcObject = s;
+    video.onloadedmetadata = () => {
+      overlay.width  = video.videoWidth;
+      overlay.height = video.videoHeight;
+    };
+  })
+  .catch(e => document.getElementById('status').textContent = 'Error cámara: ' + e.message);
+
+function toggleLoop() {
+  running = !running;
+  const btn = document.getElementById('btn-toggle');
+  btn.textContent = running ? '⏹ Detener' : '▶ Iniciar';
+  btn.className   = running ? 'btn btn-red' : 'btn btn-green';
+  btn.style.flex  = '1';
+  if (running) loop();
+}
+
+async function loop() {
+  if (!running) return;
+  const c = document.createElement('canvas');
+  c.width  = video.videoWidth;
+  c.height = video.videoHeight;
+  c.getContext('2d').drawImage(video, 0, 0);
+  const b64 = c.toDataURL('image/jpeg', 0.8).split(',')[1];
+
+  const t0 = performance.now();
+  try {
+    const res  = await fetch(API + '/recognize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: b64 })
+    });
+    const data = await res.json();
+    const ms   = Math.round(performance.now() - t0);
+
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    document.getElementById('s-total').textContent  = ms + 'ms';
+    document.getElementById('s-server').textContent = (data.time_ms ?? '—') + 'ms';
+
+    if (data.ok && data.faces.length > 0) {
+      document.getElementById('s-faces').textContent = data.faces.length;
+      data.faces.forEach(f => {
+        const [x1, y1, x2, y2] = f.bbox;
+        const known = f.name !== 'Desconocido';
+        ctx.strokeStyle = known ? '#00ff88' : '#ff4455';
+        ctx.lineWidth   = 3;
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+        // Fondo etiqueta
+        const label = `${f.name} (${f.score})`;
+        ctx.font = 'bold 16px Arial';
+        const tw  = ctx.measureText(label).width;
+        ctx.fillStyle = known ? '#00ff8844' : '#ff445544';
+        ctx.fillRect(x1, y1 - 26, tw + 12, 22);
+        ctx.fillStyle = known ? '#00ff88' : '#ff4455';
+        ctx.fillText(label, x1 + 6, y1 - 9);
+      });
+      document.getElementById('status').textContent =
+        `${data.faces.length} cara(s) detectada(s) · ${ms}ms`;
+    } else {
+      document.getElementById('s-faces').textContent = 0;
+      document.getElementById('status').textContent = `Sin caras · ${ms}ms`;
+    }
+  } catch (e) {
+    document.getElementById('status').textContent = 'Error: ' + e.message;
+  }
+  setTimeout(loop, 500);
+}
+
+// ─── TAB REGISTRAR ──────────────────────────────────────────
+async function startCapCamera() {
+  if (capStream) return;
+  try {
+    capStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    document.getElementById('cap-video').srcObject = capStream;
+  } catch (e) {
+    document.getElementById('reg-status').textContent = 'Error cámara: ' + e.message;
+  }
+}
+
+function stopCapCamera() {
+  if (capStream) { capStream.getTracks().forEach(t => t.stop()); capStream = null; }
+}
+
+function capturePhoto() {
+  const vid = document.getElementById('cap-video');
+  if (!vid.videoWidth) { alert('La cámara no está lista.'); return; }
+  const c = document.createElement('canvas');
+  c.width = vid.videoWidth; c.height = vid.videoHeight;
+  c.getContext('2d').drawImage(vid, 0, 0);
+  const b64 = c.toDataURL('image/jpeg', 0.9);
+  capturedPhotos.push(b64.split(',')[1]);
+  renderPhotos(b64);
+}
+
+function renderPhotos(newSrc) {
+  const grid = document.getElementById('photo-grid');
+  const img  = document.createElement('img');
+  img.src    = newSrc;
+  img.className = 'photo-thumb';
+  grid.insertBefore(img, grid.querySelector('.photo-slot'));
+  document.getElementById('reg-status').textContent = `${capturedPhotos.length} foto(s) lista(s).`;
+}
+
+function clearPhotos() {
+  capturedPhotos = [];
+  const grid = document.getElementById('photo-grid');
+  grid.querySelectorAll('.photo-thumb').forEach(e => e.remove());
+  document.getElementById('reg-status').textContent = 'Fotos eliminadas.';
+}
+
+async function registerPerson() {
+  const name = document.getElementById('reg-name').value.trim();
+  if (!name) { document.getElementById('reg-status').textContent = '⚠️ Escribe un nombre primero.'; return; }
+  if (capturedPhotos.length === 0) { document.getElementById('reg-status').textContent = '⚠️ Captura al menos una foto.'; return; }
+
+  document.getElementById('reg-status').textContent = 'Guardando...';
+  try {
+    const res  = await fetch(API + '/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, images: capturedPhotos })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('reg-status').textContent =
+        `✅ ${data.name} registrado con ${data.embeddings_saved} embedding(s).`;
+      document.getElementById('reg-name').value = '';
+      clearPhotos();
+    } else {
+      document.getElementById('reg-status').textContent = '❌ Error: ' + data.error;
+    }
+  } catch (e) {
+    document.getElementById('reg-status').textContent = 'Error de red: ' + e.message;
+  }
+}
+
+// ─── TAB PERSONAS ───────────────────────────────────────────
+async function loadPeople() {
+  document.getElementById('ppl-status').textContent = 'Cargando...';
+  try {
+    const res  = await fetch(API + '/people');
+    const data = await res.json();
+    const list = document.getElementById('people-list');
+
+    if (!data.people || data.people.length === 0) {
+      list.innerHTML = '<p style="color:#555; font-size:13px; margin-top:12px;">No hay personas registradas aún.</p>';
+      document.getElementById('ppl-status').textContent = '0 personas.';
+      return;
+    }
+
+    list.innerHTML = data.people.map(name => `
+      <div class="person-row">
+        <div>
+          <div class="person-name">👤 ${name}</div>
+        </div>
+        <button class="btn-del" onclick="deletePerson('${name}')">🗑 Eliminar</button>
+      </div>
+    `).join('');
+    document.getElementById('ppl-status').textContent = `${data.people.length} persona(s) registrada(s).`;
+  } catch (e) {
+    document.getElementById('ppl-status').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function deletePerson(name) {
+  if (!confirm(`¿Eliminar a "${name}" de la base de datos?`)) return;
+  try {
+    const res  = await fetch(`${API}/people/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) loadPeople();
+    else alert('Error: ' + data.error);
+  } catch (e) {
+    alert('Error de red: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>
